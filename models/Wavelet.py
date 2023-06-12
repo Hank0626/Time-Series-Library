@@ -5,6 +5,7 @@ import torch.fft
 from layers.Embed import DataEmbedding
 from layers.Conv_Blocks import Inception_Block_V1
 import pywt
+import ptwt
 import numpy as np
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
@@ -193,7 +194,11 @@ def FFT_for_Period(x, k=2):
 
 def Wavelet_for_Period(x, scale=128):
     scales = np.arange(1, 1+scale)
-    coeffs, freqs = pywt.cwt(x.detach().cpu().numpy(), scales, 'morl')
+    import time
+    start = time.time()
+    # coeffs, freqs = pywt.cwt(x.detach().cpu().numpy(), scales, 'morl')
+    coeffs, freqs = ptwt.cwt(x, scales, 'morl')
+    print(f"Time: {time.time() - start:.2f}s")
     return coeffs, freqs
     
 class Wavelet(nn.Module):
@@ -228,7 +233,7 @@ class Wavelet(nn.Module):
         # period_list, period_weight = FFT_for_Period(x, self.k)  # period_list: 特定period要循环的次数; period_weight [32, self.k]
         coeffs, freqs = Wavelet_for_Period(x, self.scale)
 
-        coeffs = torch.tensor(coeffs).to(x.device).permute(1, 3, 0, 2)
+        coeffs = torch.tensor(coeffs).to(x.device).permute(1, 3, 0, 2).float()
 
         res = self.ViT(coeffs).permute(0,3,1,2)
 
