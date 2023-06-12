@@ -166,17 +166,15 @@ class ViT(nn.Module):
         )
 
     def forward(self, img):
-        
         x = self.to_patch_embedding(img)
         b, n, _ = x.shape
 
-        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b = b)
-        x = torch.cat((cls_tokens, x), dim=1)
-        x += self.pos_embedding[:, :(n + 1)]
+        # cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b = b)
+        # x = torch.cat((cls_tokens, x), dim=1)
+        x += self.pos_embedding[:, :n]
         x = self.dropout(x)
 
         x = self.transformer(x)
-        # x = x.mean(dim = 1) if self.pool == 'mean' else x[:, 0]
         x = x[:, :self.num_patches , :]
         x = self.to_latent(x)
         return self.mlp_head(x)
@@ -192,13 +190,10 @@ def FFT_for_Period(x, k=2):
     period = x.shape[1] // top_list
     return period, abs(xf).mean(-1)[:, top_list]
 
-def Wavelet_for_Period(x, scale=128):
+def Wavelet_for_Period(x, scale=16):
     scales = np.arange(1, 1+scale)
-    import time
-    start = time.time()
     # coeffs, freqs = pywt.cwt(x.detach().cpu().numpy(), scales, 'morl')
-    coeffs, freqs = ptwt.cwt(x, scales, 'morl')
-    print(f"Time: {time.time() - start:.2f}s")
+    coeffs, freqs = ptwt.cwt(x, scales, 'morl') 
     return coeffs, freqs
     
 class Wavelet(nn.Module):
@@ -215,10 +210,10 @@ class Wavelet(nn.Module):
             Inception_Block_V1(configs.d_ff, configs.d_model,
                                num_kernels=configs.num_kernels)
         )
-        self.scale = 128
+        self.scale = 16
         self.ViT = ViT(
             image_size = (self.scale, self.seq_len + self.pred_len),
-            patch_size = 32,
+            patch_size = 16,
             dim = 1024,
             depth = 6,
             heads = 16,
@@ -229,21 +224,16 @@ class Wavelet(nn.Module):
         )
 
     def forward(self, x):
-        B, T, N = x.size()  # [32, 192, 64] [batch_size, seq_len + pred_len, model_dim]
-        # period_list, period_weight = FFT_for_Period(x, self.k)  # period_list: 特定period要循环的次数; period_weight [32, self.k]
+        B, T, N = x.size() 
         coeffs, freqs = Wavelet_for_Period(x, self.scale)
 
         coeffs = torch.tensor(coeffs).to(x.device).permute(1, 3, 0, 2).float()
 
-        res = self.ViT(coeffs).permute(0,3,1,2)
+        res = self.ViT(coeffs).permute(0, 3, 1, 2)
 
-        # adaptive aggregation
-        # period_weight = F.softmax(period_weight, dim=1)
-        # period_weight = period_weight.unsqueeze(
-        #     1).unsqueeze(1).repeat(1, T, N, 1)
-        freqs = torch.tensor(freqs).to(x.device).unsqueeze(0).unsqueeze(0).unsqueeze(0).repeat(B, T, N, 1)
+        freqs =  F.softmax(torch.tensor(freqs).to(x.device)).unsqueeze(0).unsqueeze(0).unsqueeze(0).repeat(B, T, N, 1)
         res = torch.sum(res * freqs, -1).float()
-        # residual connection
+        # # residual connection
         res = res + x
         return res
 
