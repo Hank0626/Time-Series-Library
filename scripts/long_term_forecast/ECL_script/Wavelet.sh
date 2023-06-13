@@ -1,4 +1,4 @@
-# export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=0,3
 
 model_name=Wavelet
 
@@ -11,7 +11,7 @@ python -u run.py \
   --model $model_name \
   --data custom \
   --features M \
-  --seq_len 96 \
+  --seq_len 336 \
   --label_len 48 \
   --pred_len 96 \
   --e_layers 2 \
@@ -24,4 +24,6 @@ python -u run.py \
   --d_ff 512 \
   --top_k 5 \
   --des 'Exp' \
-  --itr 1
+  --itr 1 \
+  --use_multi_gpu \
+  --wavelet_scale 12

@@ -5,7 +5,7 @@ import torch.fft
 from layers.Embed import DataEmbedding
 from layers.Conv_Blocks import Inception_Block_V1
 import pywt
-import ptwt
+# import ptwt
 import numpy as np
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
@@ -192,8 +192,9 @@ def FFT_for_Period(x, k=2):
 
 def Wavelet_for_Period(x, scale=16):
     scales = np.arange(1, 1+scale)
-    # coeffs, freqs = pywt.cwt(x.detach().cpu().numpy(), scales, 'morl')
-    coeffs, freqs = ptwt.cwt(x, scales, 'morl') 
+
+    coeffs, freqs = pywt.cwt(x.detach().cpu().numpy(), scales, 'morl')
+    # coeffs, freqs = ptwt.cwt(x, scales, 'morl') 
     return coeffs, freqs
     
 class Wavelet(nn.Module):
@@ -210,10 +211,10 @@ class Wavelet(nn.Module):
             Inception_Block_V1(configs.d_ff, configs.d_model,
                                num_kernels=configs.num_kernels)
         )
-        self.scale = 16
+        self.scale = configs.wavelet_scale
         self.ViT = ViT(
             image_size = (self.scale, self.seq_len + self.pred_len),
-            patch_size = 16,
+            patch_size = self.scale,
             dim = 1024,
             depth = 6,
             heads = 16,
@@ -225,9 +226,9 @@ class Wavelet(nn.Module):
 
     def forward(self, x):
         B, T, N = x.size() 
-        coeffs, freqs = Wavelet_for_Period(x, self.scale)
+        coeffs, freqs = Wavelet_for_Period(x.permute(0, 2, 1), self.scale)
 
-        coeffs = torch.tensor(coeffs).to(x.device).permute(1, 3, 0, 2).float()
+        coeffs = torch.tensor(coeffs).to(x.device).permute(1, 2, 0, 3).float()
 
         res = self.ViT(coeffs).permute(0, 3, 1, 2)
 
