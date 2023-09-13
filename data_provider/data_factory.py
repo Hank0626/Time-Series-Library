@@ -2,6 +2,10 @@ from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Data
     MSLSegLoader, SMAPSegLoader, SMDSegLoader, SWATSegLoader, UEAloader
 from data_provider.uea import collate_fn
 from torch.utils.data import DataLoader
+from scipy.fft import fft
+import numpy as np
+import pandas as pd
+import os
 
 data_dict = {
     'ETTh1': Dataset_ETT_hour,
@@ -29,7 +33,8 @@ def data_provider(args, flag):
         if args.task_name == 'anomaly_detection' or args.task_name == 'classification':
             batch_size = args.batch_size
         else:
-            batch_size = 1  # bsz=1 for evaluation
+            # batch_size = 1  # bsz=1 for evaluation
+            batch_size = args.batch_size
         freq = args.freq
     else:
         shuffle_flag = True
@@ -90,3 +95,20 @@ def data_provider(args, flag):
             num_workers=args.num_workers,
             drop_last=drop_last)
         return data_set, data_loader
+
+def measure_periodicity_fft(signal, freq=5):
+    p = []
+    for i in range(signal.shape[0]):
+        fft_output = np.abs(fft(signal[i]))
+        magnitude = np.abs(fft_output)**2
+        magnitude = magnitude[:freq]
+        total_energy = np.sum(magnitude)
+        peak_energy = magnitude.max()
+        periodicity = peak_energy / total_energy
+        p.append(periodicity)
+    return np.mean(p)
+
+def period_coeff(args):
+    df_raw = pd.read_csv(os.path.join(args.root_path, args.data_path))
+    df_raw = np.array(df_raw.select_dtypes(include=['int', 'float'])).T
+    return measure_periodicity_fft(df_raw)
